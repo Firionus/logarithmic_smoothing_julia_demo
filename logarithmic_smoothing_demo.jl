@@ -20,18 +20,24 @@ using Plots, CSV, ImageFiltering, NonuniformResampling1D, NonlinearSequences
 md"""
 # Logarithmic Smoothing in Julia
 
-This demo shows how to perform smoothing on a logarithmic scale in Julia. A loudspeaker frequency response measurement will be used as an example. 
+This demo shows how to smooth data on a logarithmic scale in Julia. As an example, I'll use a loudspeaker frequency response measurement.
 
-To achieve the smoothing, we'll use two unregistered packages of mine: [`NonuniformResampling1D`](https://github.com/Firionus/NonuniformResampling1D.jl) and [`NonlinearSequences`](https://github.com/Firionus/NonlinearSequences.jl).
+The smoothing will use two unregistered packages of mine: 
+- [`NonuniformResampling1D`](https://github.com/Firionus/NonuniformResampling1D.jl),
+- [`NonlinearSequences`](https://github.com/Firionus/NonlinearSequences.jl).
 
-This document is a [Pluto.jl](https://github.com/fonsp/Pluto.jl) notebook. The code for this demo is available at TODO LINK.
+This demo is available at <https://github.com/Firionus/logarithmic_smoothing_julia_demo>.
+
+Let's get started!
 """
 
 # ╔═╡ ddfb9f83-a845-42d9-801a-d866528c3603
 md"""
 ## Import the Packages
 
-You can install the unregistered packages in the REPL by switching to Pkg mode (type `]`) and running:
+For this notebook, the supplied `Project.toml` is used. 
+
+To perform logarithmic smoothing in your own environment, install the two unregistered packages. For this, switch your REPL into Pkg mode by typing `]` and run:
 ```
 add https://github.com/Firionus/NonuniformResampling1D.jl
 add https://github.com/Firionus/NonlinearSequences.jl
@@ -48,8 +54,9 @@ Let's use CSV.jl to parse it, convert each column to an array and save the frequ
 """
 
 # ╔═╡ d8a3e8f1-83b4-425c-ace8-c48452c97c73
-f, magnitude, _ = map( # ignore phase
-	col -> (col.column|>Array)[2:end], # exclude f=0 
+f, magnitude, _ = map( # ignore phase in third column
+	# exclude first value (f=0) since it's no good on a log scale 
+	col -> (col.column|>Array)[2:end], 
 	CSV.File("example_frequency_response.csv").columns
 )
 
@@ -57,9 +64,9 @@ f, magnitude, _ = map( # ignore phase
 md"""
 ## Plot the Raw Data
 
-The magnitude response data for loudspeakers is typically plotted in dB on a logarithmic scale from the lowest audible frequency of 20 Hz to the highest audible frequency of 20 kHz. The logarithmic scale is important because it approximates the way humans perceive tones. Fundamental frequencies of 220 Hz, 440 Hz and 880 Hz are commonly heard as the same tone, just with an octave between each of them (a factor of two). 
+The magnitude response data for loudspeakers is typically plotted in dB with a logarithmic frequency scale from the lowest audible frequency of 20 Hz to the highest audible frequency of 20 kHz. The logarithmic scale is important because it approximates the way humans perceive tones. Fundamental frequencies of 220 Hz, 440 Hz and 880 Hz are commonly heard as the same tone, just with an octave between each of them (a factor of two). 
 
-> Comment: There are better scales than logarithmic for approximating human perception of tones, like mel, EBR or Bark. But none of them are as simple as the logarithmic scale. 
+> Comment: There are better scales for approximating the human perception of tones, like mel, EBR or Bark. But none of them are as simple as the logarithmic scale. 
 
 Looking at this plot, the data is quite clear around 150 Hz. The output drops off below 120 Hz, which means the speaker does not produce much bass, which is expected from a midrange driver. 
 
@@ -75,7 +82,7 @@ plot(f, magnitude, xaxis=:log, xticks=[10, 100, 1e3, 10e3], minorticks=true, min
 md"""
 ### Failing with Linear Smoothing
 
-Let's use a naive moving mean smoothing with [`ImageFiltering.jl`](https://juliaimages.org/ImageFiltering.jl/stable/) and see what happens: 
+Let's use a naive moving mean smoothing algorithm from [`ImageFiltering.jl`](https://juliaimages.org/ImageFiltering.jl/stable/) and see what happens: 
 """
 
 # ╔═╡ 35d2be48-81b5-4605-882a-684deb8675d3
@@ -89,7 +96,7 @@ end
 md"""
 This shows the issue with linear smoothing: Either the noise at high frequencies is gone, but the low frequencies have no detail and have issues with missing data outside the boundaries (that's why the magnitude goes down below 1 kHz). Or the low frequencies have the right amount of detail, but the highs are too noisy. 
 
-Further, the filtering takes almost two seconds for the larger filter, which is unacceptably slow. While smoothing, the resolution of data points should be reduced accordingly. 
+Further, the filtering for the larger filter takes over a second, which is unacceptably slow. This is because there are so many data points to consider. Therefore, the smoothing algorithm should be combined with downsampling to reduce memory requirements and speed up computation. 
 
 That is where logarithmic smoothing and resampling comes in. 
 
@@ -107,11 +114,11 @@ Next, define the desired frequency points after the smoothing and resampling. We
 """
 
 # ╔═╡ b255464e-366e-4329-b6c0-4d619d2be4ff
-flog = octspace(20, 20e3, resolution)
+flog = octspace(20, 21e3, resolution)
 
 # ╔═╡ 9f6810e4-eadb-410b-850f-6bb9cda78800
 md"""
-The resampling requires the input frequencies to be defined as a range to make calculations efficient. So approximate the linearly spaced frequencies with a range:
+The resampling requires the input values to be sampled linearly and the input frequencies to be defined as a range. This makes calculations efficient and restricts the resampling problem to a manageable subset.  So let's approximate the linearly spaced frequencies with a range:
 """
 
 # ╔═╡ 11f8da69-4a42-4f5c-a77c-11d94181c0a8
@@ -135,7 +142,7 @@ end
 md"""
 Now this is a much nicer result! Both the low and the high frequencies are smoothed but retain the same amount of detail when plotted on a log axis. 
 
-And because we performed downsampling at the same time, `smoothed` is only $(length(smoothed)) elements long and is calculated in less than a millisecond. Much faster than the two seconds that the moving mean took!
+And because we performed downsampling at the same time, `smoothed` is only $(length(smoothed)) elements long and is calculated in less than a millisecond. Over 1000 times faster than linear smoothing!
 
 Of course, I hear you say, the smoothed graph now looks quite edgy because the amount of points is so low. Luckily, there's an easy way to change that: oversampling.
 """
@@ -151,11 +158,11 @@ Oversampling increases the amount of points without changing the width of the sm
 oversampling = 8 # 8 times as many points as previously
 
 # ╔═╡ ebf1d7f5-ca3b-47fb-8fab-e49104a4fae5
-flog_oversampled = octspace(20, 20e3, resolution/oversampling)
+flog_oversampled = octspace(20, 21e3, resolution/oversampling)
 
 # ╔═╡ 6d4e2046-4d64-4267-81a6-29df79763542
 md"""
-Increase the size of the smoothing_function by the oversampling factor:
+Increase thewidth of the `smoothing_function` by the oversampling factor:
 """
 
 # ╔═╡ 7b56eec9-2717-49df-b39b-017b4d7a330c
@@ -177,9 +184,9 @@ The reason for this remaining fine noise is that we used a rectangular window (`
 
 The solution: Points at the edge must be weighed less than in the middle of the window. This is what we will do in the next section. 
 
-## Using a Better Window
+## Using a Smoother Window
 
-[`NonuniformResampling1D.jl`](https://github.com/Firionus/NonuniformResampling1D.jl) offers a selection of windows as an alternative to the rectangular window. A simple option is the Hann window, which is just a raised cosine function. It's much more smooth at the edge than the rectangular window:
+[`NonuniformResampling1D.jl`](https://github.com/Firionus/NonuniformResampling1D.jl) offers a selection of windows as an alternative to the rectangular window. A simple option is the Hann window, which is just a raised cosine function. Compared to the rectangular window, the Hann window is smooth and gives less weight to points that are further away:
 """
 
 # ╔═╡ 19b0cc8b-c778-41cd-a140-e43da74f7e82
@@ -191,7 +198,7 @@ end
 
 # ╔═╡ e64cf445-613d-4917-b3d8-bfeff82d81f7
 md"""
-Note that for a similar smoothing effect, we have to use about twice the width for the Hann window compared to the rectangular window. 
+Note that for a similar smoothing effect, we have to use a wider width for the Hann window compared to the rectangular window. Here, we'll use twice the width. 
 
 Applying this to our smoothing problem, the code looks like this:
 """
@@ -207,7 +214,7 @@ end
 
 # ╔═╡ 7639a14c-449a-4611-806e-3405717debcf
 md"""
-As you can see, the Hann window strongly reduces the amount of high frequency noise in the smoothed output. But also note that it tends to make peaks look more washed out, which may or may not be desirable. Lowering the width of the Hann window is an easy way to get back some more detail:
+As you can see, the Hann window strongly reduces the amount of high frequency noise in the smoothed output. But also note that it tends to make peaks look more soft and monotone, which may or may not be desirable. Lowering the width of the Hann window is an easy way to get back some more detail:
 """
 
 # ╔═╡ d42f283f-afbf-4fab-bcb5-c97b5504a646
@@ -221,8 +228,6 @@ end
 
 # ╔═╡ 86ad9972-5280-42b2-85a6-434a12ee412c
 md"""
-Lowering the width of the Hann window to 0.7 recovers some more detail. 
-
 > Comment: In the audio community, the amount of smoothing is usually communicated as just "1/12 octave smoothed", with no mention of the used window. This is because usually a rectangular window is assumed, so when you use a different window, you should document it. 
 """
 
@@ -257,7 +262,7 @@ low_smoothed = nuresample(frange, magnitude, low_flog, rect_window(.5*oversampli
 md"""
 Oh no, an Error! It is telling us that there are not enough points at the beginning. Basically, we asked the resample algorithm to generate points around 0.3 Hz, where there is no input point in the window at all. 
 
-This alone would not throw off the algorithm, since it will try to perform upsampling with a Lanczos3 algorithm and just interpolate points when there are not enough. However, interpolation with Lanczos3 takes 3 surrounding points to each side and these just don't exist in our case. In this case, `nuresample` will error instead of using a boundary condition to guess values. 
+This alone would not throw off the algorithm, since it will try to perform upsampling with a Lanczos3 algorithm and just interpolate points when there are not enough. However, interpolation with Lanczos3 takes 3 surrounding points to each side and these just don't exist in our case. In this case, `nuresample` will error instead of inventing values. 
 
 The easiest way of dealing with this is to increase the lowest frequency for which we ask the resampling algorithm until the error goes away:
 """
@@ -276,26 +281,27 @@ end
 
 # ╔═╡ f24c21bc-5178-4c2c-b2d9-9d059ecdb915
 md"""
-And we get a beautiful result. You can see that the output has a similar level of detail everywhere, though it drops towards the very low frequencies, when the density of input points becomes less than 1/12 octaves. Still the output is smooth even when there are little input points, because by default high quality Lanczos3 interpolation is performed before applying the smoothing. 
+And we get a beautiful result. You can see that the output has a similar level of detail everywhere, though it drops towards the very low frequencies, when the density of input points becomes less than 1/12 octaves. Still, the output is smooth even when there are little input points. This is because by default high quality Lanczos3 interpolation is performed before applying the smoothing. 
 
-What other options are there to make a "not enough points at boundaries" error go away? 
+What other options are there to make a "not enough points" error go away? 
 
-1. Avoid triggering the upsampling by changing the keyword argument `required_points_per_slice` from its default of 4 to a lower value. This will not help much in this case, since the number of input points is so low and the output resolution is quite high, so upsampling is needed anyway to create at least one point in each window. 
-2. Use a lower quality upsampling algorithm that needs less supporting points. For example, we could use linear interpolation instead:
+1. Avoid triggering the upsampling by changing the keyword argument `required_points_per_slice`. By default, this is set to 4, which means to each side of an output point there must be 4 input points in the window, otherwise 4 points will be interpolated.  
+    But changing this value will not help much in our case, since the number of input points is so low and the output resolution is quite high, so upsampling is needed anyway to create at least one point in each window. 
+2. Use a lower quality upsampling algorithm that needs less supporting points. For example, instead of Lanczos3 we could use linear interpolation:
 """
 
 # ╔═╡ 285a45dd-2fd0-48aa-897a-57440e8c7001
-low_smoothed3 = nuresample(frange, magnitude, low_flog, rect_window(.5*oversampling), upsampling_function=tri_window()) # triangular window results in linear interpolation
+low_smoothed_lin = nuresample(frange, magnitude, low_flog, rect_window(.5*oversampling), upsampling_function=tri_window()) # triangular window results in linear interpolation
 
 # ╔═╡ e903849a-d56f-473b-82d6-5557baa416b9
 begin
 	plot(f, magnitude, xaxis=:log, xticks=[0.1, 1, 10, 100], minorticks=true, minorgrid=true, xlabel="f in Hz (log)", ylabel="dB", title="Linear Interpolation", label="raw", xlims=(.3, 20), ylims=(10, 90), alpha=.3, legend=:topleft)
-	plot!(low_flog, low_smoothed3, label="log smooth 1/12 oct (8x)")
+	plot!(low_flog, low_smoothed_lin, label="log smooth 1/12 oct (8x)")
 end
 
 # ╔═╡ 35b07433-b177-48fe-a344-404c1b6bcd2d
 md"""
-Note that linear interpolation is applied before the normal 1/12 octave smoothing, so around 0.6 Hz you can still see some slight differences between the linear interpolation in the plot and the result of our log smoothing. 
+Note that linear interpolation is applied before the normal 1/12 octave smoothing, so you can still see some slight differences between the linear interpolation in the raw data plot and the result of the log smoothing. 
 
 Instead of using linear interpolation, you may visually prefer the look of Lanczos1 interpolation, which requires just as little surrounding points, but results in smoother output:
 """
@@ -315,7 +321,7 @@ md"""
 
 I hope this demo of how to perform logarithmic smoothing with my packages [`NonuniformResampling1D`](https://github.com/Firionus/NonuniformResampling1D.jl) and [`NonlinearSequences`](https://github.com/Firionus/NonlinearSequences.jl) was useful to you. 
 
-If you need other kinds of nonlinear smoothing, I hope it became clear that you can just replace `flog` with a differently spaced vector to get other kinds of nonlinear smoothing. This flexibility is what's great about `nuresample`.
+If you need other kinds of nonlinear smoothing, I hope it became clear that you can just replace `flog` with a differently spaced vector to get other kinds of nonlinear smoothing. `nuresample` is quite flexible there.
 
 If you have any feedback regarding this demo or the used packages, feel free to open an issue in the corresponding GitHub repository. Even if it's just saying thank you or that you found a typo, an issue is a great way to reach out and I'd love to hear from you ❤️
 """
@@ -323,7 +329,7 @@ If you have any feedback regarding this demo or the used packages, feel free to 
 # ╔═╡ Cell order:
 # ╟─e2ce0c30-0ce1-11ed-084b-4523774d8541
 # ╟─ddfb9f83-a845-42d9-801a-d866528c3603
-# ╠═c86650f9-4952-4064-80b6-e6d4c6253126
+# ╟─c86650f9-4952-4064-80b6-e6d4c6253126
 # ╠═dfb41db2-0b57-4de9-a44e-cd1f70842588
 # ╟─cc004309-0ed9-465d-9f43-037ab1949a4e
 # ╠═d8a3e8f1-83b4-425c-ace8-c48452c97c73
