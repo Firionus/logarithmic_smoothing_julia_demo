@@ -22,11 +22,11 @@ md"""
 
 This demo shows how to smooth data on a logarithmic scale in Julia. As an example, I'll use a loudspeaker frequency response measurement.
 
-The smoothing will use two unregistered packages of mine: 
-- [`NonuniformResampling1D`](https://github.com/Firionus/NonuniformResampling1D.jl),
-- [`NonlinearSequences`](https://github.com/Firionus/NonlinearSequences.jl).
+The smoothing will use two unregistered packages of mine: [`NonuniformResampling1D`](https://github.com/Firionus/NonuniformResampling1D.jl) and [`NonlinearSequences`](https://github.com/Firionus/NonlinearSequences.jl).
 
-This demo is available at <https://github.com/Firionus/logarithmic_smoothing_julia_demo>.
+The HTML version of this notebook can be viewed at <https://firionus.github.io/logarithmic_smoothing_julia_demo>. 
+
+To run this Pluto notebook yourself, see the instructions at <https://github.com/Firionus/logarithmic_smoothing_julia_demo>.
 
 Let's get started!
 """
